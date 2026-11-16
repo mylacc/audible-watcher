@@ -42,7 +42,7 @@ def test_refused_page_gives_exact_steps(client):
     assert resp.status_code == 400
     assert "Address not recognised" in html
     assert "- AW_ALLOWED_HOSTS=nas.example.com" in html          # Compose
-    assert "Environment=AW_ALLOWED_HOSTS=nas.example.com" in html  # systemd
+    assert "-e AW_ALLOWED_HOSTS=nas.example.com" in html            # docker run
     assert webapp.README_ACCESS_URL in html
 
 
@@ -59,11 +59,9 @@ def test_readme_access_section():
                   encoding="utf-8").read()
     section = readme[readme.index("## Opening it from other devices"):
                      readme.index("## Notes")]
-    for heading in ("### Docker Compose", "### docker run",
-                    "### Linux service (systemd)", "### Windows installer",
-                    "### From source"):
+    for heading in ("### Docker Compose", "### docker run"):
         assert heading in section
-    for var in ("AW_HOST", "AW_ALLOWED_HOSTS", "AW_PASSWORD"):
+    for var in ("AW_ALLOWED_HOSTS", "AW_PASSWORD"):
         assert var in section
     # the anchor the app links to exists
     assert webapp.README_ACCESS_URL.endswith("#opening-it-from-other-devices")

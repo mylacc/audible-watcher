@@ -12,8 +12,3 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-build/
-dist/
-*.spec
-packaging/icon.ico
-packaging/Output/

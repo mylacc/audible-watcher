@@ -1,38 +1,16 @@
-# Push a tag like v1.0.0 to release: the full test suite (every OS and
-# Python version, plus the Docker check) must pass first. Then it builds the
-# Windows installer, attaches it to a GitHub release, and publishes the
-# Docker image to ghcr.io/<owner>/audible-watcher.
+# Push a tag like v1.0.0 to release: the test suite and the Docker check
+# must pass first, then the image is published to
+# ghcr.io/<owner>/audible-watcher (tagged with the version and latest).
 name: release
 on:
   push:
     tags: ["v*"]
 permissions:
-  contents: write
+  contents: read
   packages: write
 jobs:
   tests:
     uses: ./.github/workflows/tests.yml
-
-  windows:
-    needs: tests
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
-      - name: Build app and installer
-        shell: pwsh
-        run: |
-          $v = "${{ github.ref_name }}".TrimStart("v")
-          ./packaging/build_windows.ps1 -Version $v
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: packaging/Output/AudibleWatcher-Setup-*.exe
-          generate_release_notes: true
 
   docker:
     needs: tests

@@ -79,7 +79,7 @@ LOCAL_HOST_SUFFIXES = (".local", ".lan", ".home", ".home.arpa", ".internal",
                        ".localhost")
 
 
-README_ACCESS_URL = ("https://github.com/Andrew911tt/audible-watcher"
+README_ACCESS_URL = ("https://github.com/mylacc/audible-watcher"
                      "#opening-it-from-other-devices")
 
 
@@ -1077,9 +1077,8 @@ def account_disconnect():
 
 @app.route("/healthz")
 def healthz():
-    """Liveness check for Docker and for the desktop launcher, which uses
-    the "app" field to tell this app apart from anything else on the port.
-    Reveals nothing else, so it needs no sign-in."""
+    """Liveness check for Docker's HEALTHCHECK. Reveals nothing, so it
+    needs no sign-in."""
     return {"app": "audible-watcher", "ok": True}
 
 
@@ -1139,7 +1138,7 @@ def start_scheduler():
 
 if __name__ == "__main__":
     start_scheduler()
-    try:  # production server if installed (Docker, desktop build)
+    try:  # production server (installed from requirements.txt)
         from waitress import serve
         log.info("Audible Watcher on http://%s:%s", HOST, PORT)
         serve(app, host=HOST, port=PORT, threads=8)

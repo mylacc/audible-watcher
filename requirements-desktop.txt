@@ -1,5 +1,0 @@
-# Extra packages for the Windows tray app / installer build (desktop.py).
--r requirements.txt
-pystray>=0.19
-Pillow>=10.0
-pyinstaller>=6.0

@@ -24,15 +24,11 @@
     then run <code>docker compose up -d</code>:</p>
   <pre>      - AW_ALLOWED_HOSTS={{ name }}</pre>
 
-  <h2>Linux service (systemd)</h2>
-  <p>Run <code>sudo systemctl edit audible-watcher</code>, add these lines,
-    save, then <code>sudo systemctl restart audible-watcher</code>:</p>
-  <pre>[Service]
-Environment=AW_ALLOWED_HOSTS={{ name }}</pre>
+  <h2>docker run</h2>
+  <p>Add <code>-e AW_ALLOWED_HOSTS={{ name }}</code> and recreate the
+    container. More in <a href="{{ help_url }}" target="_blank"
+    rel="noopener">“Opening it from other devices”</a>.</p>
 
-  <h2>Other installs</h2>
-  <p>See <a href="{{ help_url }}" target="_blank" rel="noopener">“Opening it
-    from other devices”</a> for Windows and running from source.</p>
 
   <p class="muted small">Or skip all this and open the app by its IP
     address instead (for example <code>http://192.168.1.20:5055</code>):

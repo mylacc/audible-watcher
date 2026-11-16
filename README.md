@@ -31,8 +31,10 @@ Content and Devices".
 > **This fork** (mylacc/audible-watcher) adds two things to
 > [Andrew911tt/audible-watcher](https://github.com/Andrew911tt/audible-watcher):
 > [wishlist price alerts](#wishlist-price-alerts) and
-> [sending through a mail relay without sign-in](#mail-relay-without-sign-in).
-> Its Docker image is `ghcr.io/mylacc/audible-watcher`.
+> [sending through a mail relay without sign-in](#mail-relay-without-sign-in),
+> and drops the upstream Windows installer, desktop tray app and
+> run-from-source setups: it's Docker only. Its image is
+> `ghcr.io/mylacc/audible-watcher`.
 
 > Audible Watcher is an independent open-source project. It is not
 > affiliated with or endorsed by Audible or Amazon.
@@ -78,26 +80,7 @@ Content and Devices".
   panel in Settings showing how yours is set up. See
   [Opening it from other devices](#opening-it-from-other-devices).
 
-## Install
-
-### Windows (installer)
-
-1. Download **AudibleWatcher-Setup-x.y.z.exe** from the
-   [latest release](https://github.com/Andrew911tt/audible-watcher/releases/latest).
-2. Run it. No admin rights or Python needed. Leave **"Start Audible Watcher
-   when I sign in"** ticked — the app has to be running for the daily check.
-3. Audible Watcher opens in your browser at **http://localhost:5055**. It
-   keeps running in the background with an icon in the system tray
-   (right-click it to open the app or quit).
-
-Windows SmartScreen may warn about an unrecognized app because the installer
-isn't code-signed. Click **More info → Run anyway**, or build it yourself
-from source (below).
-
-Your data is kept in `%LOCALAPPDATA%\Audible Watcher` (tray menu → *Open
-data folder*). Uninstalling leaves it in place.
-
-### Docker (NAS / home server)
+## Install (Docker)
 
 A ready-made image is published with every release, so you only need a
 `docker-compose.yml`:
@@ -126,32 +109,6 @@ later: `docker compose pull && docker compose up -d`.
 Prefer to build it yourself? Clone the repository, copy
 `docker-compose.example.yml` to `docker-compose.yml` (it builds from
 source) and run `docker compose up -d`.
-
-**Upgrading a Docker install from 1.0.0 or 1.0.1:** since 1.0.2 the
-container runs as an unprivileged user (uid 1000) instead of root. Give it
-the data folder once before starting the new version:
-`sudo chown -R 1000:1000 ./data`. If you forget, the container stops with
-a message saying exactly that.
-
-### From source (Windows, macOS, Linux)
-
-Requires Python 3.10+ ([python.org](https://www.python.org/downloads/) —
-on Windows, check "Add Python to PATH" during install).
-
-```
-git clone https://github.com/mylacc/audible-watcher.git
-cd audible-watcher
-pip install -r requirements.txt
-python app.py
-```
-
-Then open **http://localhost:5055**. When run from source, data is kept next
-to `app.py` (`watcher.db`, `audible_auth.json`).
-
-- Windows: double-click `start.bat` (after the one-time `pip install`).
-- macOS / Linux: `./start.sh`
-- Prefer the tray app? `pip install -r requirements-desktop.txt` then
-  `python desktop.py`.
 
 ## Set up email
 
@@ -217,49 +174,30 @@ price or less.
 
 Disconnecting your Audible account deletes the stored wishlist.
 
-## Run it automatically (source / server installs)
-
-The Windows installer and Docker handle this for you. Otherwise:
-
-**Windows** — Task Scheduler → Create Basic Task → trigger *When I log on* →
-*Start a program*: `pythonw.exe`, arguments `app.py`, start in the
-`audible-watcher` folder.
-
-**Linux** — systemd (edit the user and paths in the file first):
-```
-sudo cp audible-watcher.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now audible-watcher
-```
-
-**macOS** — add `start.sh` as a Login Item, or use `launchd`.
-
 ## Settings via environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AW_HOST` | `127.0.0.1` | Address to listen on. `0.0.0.0` makes it reachable from other devices on your network. There's no login unless you set `AW_PASSWORD`, so only do this on a trusted network. |
+| `AW_HOST` | `0.0.0.0` in Docker | Address to listen on inside the container. Leave it alone; publish or restrict the port in Docker instead. There's no login unless you set `AW_PASSWORD`. |
 | `AW_PORT` | `5055` | Port. |
-| `AW_DATA_DIR` | see above | Folder for `watcher.db` and `audible_auth.json`. |
+| `AW_DATA_DIR` | `/data` in Docker | Folder for `watcher.db` and `audible_auth.json`. |
 | `AW_ALLOWED_HOSTS` | *(empty)* | Extra hostnames you open the app by, comma-separated (e.g. `nas.example.com`). IP addresses, `localhost`, names without a dot and `.local` / `.lan` / `.home` / `.home.arpa` / `.internal` names always work. Other names are refused, which blocks websites that try to reach the app through your browser (DNS rebinding). See [Opening it from other devices](#opening-it-from-other-devices). |
 | `AW_PASSWORD` | *(empty)* | Set it to require a password to open the app. Recommended if anyone you don't trust can reach it. See [Opening it from other devices](#opening-it-from-other-devices). |
 | `AW_PROXY_COUNT` | `0` | Only if the app sits behind a reverse proxy (nginx, Caddy, Traefik…): how many proxies are in front of it. The app then sees each visitor's real address, so a wrong-password lockout only affects that visitor. Leave it at 0 otherwise: it makes the app trust forwarded headers. |
 
-How to set an environment variable depends on how you installed the app —
-the next section has the exact steps for each.
+Set them under `environment:` in `docker-compose.yml` (or with `-e` on
+`docker run`), then recreate the container.
 
 ## Opening it from other devices
 
-By default Audible Watcher only answers on the computer it runs on
-(`http://localhost:5055`), and there's nothing to set up. The Docker image
-is the exception: it's reachable from your network out of the box.
+The container is reachable from your network out of the box on the
+port you publish.
 
-Three settings control access from other devices. You can check how yours
+Two settings control access from other devices. You can check how yours
 are set at the bottom of the **Settings** page.
 
 | Setting | When you need it |
 |---|---|
-| `AW_HOST=0.0.0.0` | To open the app from a phone, tablet or another computer at all. (Docker already does this.) |
 | `AW_ALLOWED_HOSTS` | Only if you open the app by a **full domain name**, like `nas.example.com` or `audible.mydomain.net`. IP addresses (`http://192.168.1.20:5055`), `localhost`, single names (`http://nas:5055`) and `.local` / `.lan` / `.home` / `.home.arpa` / `.internal` names always work. |
 | `AW_PASSWORD` | If anyone you don't fully trust can reach the app: shared Wi-Fi, housemates, or any access from outside your home. Without it, anyone who can reach the port can use the app. |
 
@@ -294,51 +232,6 @@ docker run -d -p 5055:5055 -v ./data:/data \
   -e AW_ALLOWED_HOSTS=nas.example.com \
   -e AW_PASSWORD=choose-a-password \
   audible-watcher
-```
-
-### Linux service (systemd)
-
-```
-sudo systemctl edit audible-watcher
-```
-
-In the editor that opens, add the lines you need, save and close:
-
-```ini
-[Service]
-Environment=AW_HOST=0.0.0.0
-Environment=AW_ALLOWED_HOSTS=nas.example.com
-Environment=AW_PASSWORD=choose-a-password
-```
-
-Then `sudo systemctl restart audible-watcher`.
-
-### Windows installer
-
-The desktop app only answers on this PC, so you normally don't need any of
-this. To use it from other devices anyway:
-
-1. Open **Start**, search for **“Edit environment variables for your
-   account”** and open it.
-2. Click **New…** and add `AW_HOST` = `0.0.0.0`. Add `AW_PASSWORD` the same
-   way, and `AW_ALLOWED_HOSTS` if you'll use a full domain name.
-3. Right-click the Audible Watcher tray icon → **Quit**, then start it again
-   from the Start menu. Windows may ask to allow it through the firewall.
-
-### From source
-
-macOS / Linux — put the settings in front of the start command:
-
-```
-AW_HOST=0.0.0.0 AW_PASSWORD=choose-a-password ./start.sh
-```
-
-Windows — add `set` lines to `start.bat` before `python app.py`:
-
-```bat
-set AW_HOST=0.0.0.0
-set AW_PASSWORD=choose-a-password
-python app.py
 ```
 
 **Signing in:** with `AW_PASSWORD` set, every device asks for the password
@@ -417,9 +310,8 @@ different titles (a bigger window, a different search), bump
 update then records the extra titles quietly instead of flagging them as
 new releases.
 
-GitHub Actions runs the tests on every push: on Windows and Linux with
-Python 3.12, plus Linux with Python 3.10 (the oldest supported) and 3.14.
-It also builds the Docker image and checks that the container starts,
+GitHub Actions runs the tests on every push (Linux, Python 3.12, the
+same as the image). It also builds the Docker image and checks that the container starts,
 runs as a non-root user, can write its data folder and refuses unknown
 hostnames.
 
@@ -432,17 +324,10 @@ GitHub Actions, or locally with:
 AW_LIVE_TESTS=1 python -m pytest live_tests
 ```
 
-**Building the Windows installer yourself:** install Python 3.12 and
-[Inno Setup 6](https://jrsoftware.org/isinfo.php), then run
-`powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1 -Version 1.0.0`.
-The installer lands in `packaging\Output\`.
-
-**Releases:** pushing a tag like `v1.0.0` makes GitHub Actions run the full
-test suite (every OS and Python version, plus the Docker check), then build
-the installer, attach it to a new release and publish the Docker image to
-`ghcr.io`. Nothing is published if any test fails.
-
-Pull requests and forks are welcome.
+**Releases:** pushing a tag like `v1.0.0` makes GitHub Actions run the
+tests and the Docker check, then publish the image to
+`ghcr.io/mylacc/audible-watcher` as `:1.0.0` and `:latest`. Nothing is
+published if any test fails.
 
 ## License
 

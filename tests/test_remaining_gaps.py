@@ -1,8 +1,7 @@
 """Tests for the last review items: input validation, sending email over
 SMTP (faked), print-date lookups (faked HTTP), database migration from the
-first version, local-time display, and the desktop launcher's port check."""
+first version and local-time display."""
 import email
-import json
 import smtplib
 import sqlite3
 import ssl
@@ -14,7 +13,6 @@ import audible_api
 import bookinfo
 import checker
 import db
-import desktop
 import mock_api
 
 
@@ -252,62 +250,8 @@ def test_pages_show_local_times(client, watched):
                    for cell in html.split(">") if cell[:2] == "20")
 
 
-# ---- desktop launcher --------------------------------------------------------
-
-def test_desktop_import_has_no_side_effects():
-    import logging
-    assert not any(getattr(h, "baseFilename", "").endswith(
-        "audible-watcher.log") for h in logging.getLogger().handlers)
-
+# ---- health check -----------------------------------------------------------
 
 def test_healthz_identifies_the_app(client, monkeypatch):
     monkeypatch.setenv("AW_PASSWORD", "x")  # works without signing in
     assert client.get("/healthz").get_json()["app"] == "audible-watcher"
-
-
-class _Sock:
-    def __init__(self, open_):
-        self.open_ = open_
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def settimeout(self, t):
-        pass
-
-    def connect_ex(self, addr):
-        return 0 if self.open_ else 111
-
-
-class _Body:
-    def __init__(self, payload):
-        self.payload = payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def read(self, *a):
-        return json.dumps(self.payload).encode()
-
-
-@pytest.mark.parametrize("port_open, reply, expected", [
-    (False, None, "free"),
-    (True, {"app": "audible-watcher"}, "ours"),
-    (True, {"app": "something-else"}, "other"),
-    (True, OSError("not http"), "other"),
-])
-def test_desktop_port_status(monkeypatch, port_open, reply, expected):
-    monkeypatch.setattr(desktop.socket, "socket", lambda: _Sock(port_open))
-
-    def urlopen(url, timeout=None):
-        if isinstance(reply, Exception):
-            raise reply
-        return _Body(reply)
-    monkeypatch.setattr(desktop.urllib.request, "urlopen", urlopen)
-    assert desktop._port_status(5055) == expected
