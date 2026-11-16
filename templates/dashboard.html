@@ -85,6 +85,9 @@
   <a class="btn {% if tab == 'library' %}active{% endif %}"
      href="{{ url_for('dashboard', tab='library') }}">Library
      <span class="count">{{ owned_total }}</span></a>
+  <a class="btn {% if tab == 'wishlist' %}active{% endif %}"
+     href="{{ url_for('dashboard', tab='wishlist') }}">Wishlist
+     <span class="count">{{ wishlist_total }}</span></a>
 </div>
 
 {% if tab == 'preorders' %}
@@ -153,6 +156,71 @@
   <p class="muted">No owned books synced yet —
     <a href="{{ url_for('settings_page', _anchor='account') }}">connect your Audible account</a>
     (or hit “Sync library now” under Audible account in Settings).</p>
+  {% endif %}
+{% elif tab == 'wishlist' %}
+  {% if not connected %}
+  <p class="muted">Price alerts read your Audible wishlist, so they need your
+    account: <a href="{{ url_for('settings_page', _anchor='account') }}">connect
+    your Audible account</a> in Settings.</p>
+  {% else %}
+  <div class="section-head">
+    <p class="muted small">
+      {% if price_default is not none %}
+        Default alert price: <strong>{{ price_default|money }}</strong>
+      {% else %}
+        No default alert price —
+        <a href="{{ url_for('settings_page', _anchor='monitoring') }}">set one in
+        Settings</a>, or set one per title below.
+      {% endif %}
+      · Checked twice a day{% if wishlist_checked_at %}, last
+      {{ wishlist_checked_at|localtime }}{% endif %}.
+    </p>
+    <form method="post" action="{{ url_for('wishlist_refresh') }}">
+      <button class="btn btn-small" type="submit"
+              {% if check_running %}disabled{% endif %}>Refresh prices now</button>
+    {{ csrf_field() }}</form>
+  </div>
+  {% if wishlist_error %}<div class="notice err">⚠️ {{ wishlist_error }}</div>{% endif %}
+  {% if wishlist_items %}
+  <table class="watch-table wishlist-table">
+    <thead>
+      <tr><th></th><th>Title</th><th>Price now</th><th>List</th>
+          <th>Lowest seen</th><th>Alert at or below</th></tr>
+    </thead>
+    <tbody>
+      {% for i in wishlist_items %}
+      <tr {% if i.hit %}class="row-new"{% endif %}>
+        <td>{% if i.image_url %}<img src="{{ i.image_url }}" alt="" width="48" loading="lazy">{% endif %}</td>
+        <td><a href="{{ i.url }}" target="_blank" rel="noopener">{{ i.title }}</a>
+          {% if i.owned %}<span class="badge badge-owned">OWNED</span>{% endif %}
+          <div class="muted small">{{ i.authors }}{% if i.series_title %} ·
+            <em>{{ i.series_title }}{% if i.series_sequence %} (Book {{ i.series_sequence }}){% endif %}</em>{% endif %}</div>
+        </td>
+        <td>{% if i.hit %}<span class="badge">{{ i.price|money(i.currency) }}</span>
+            {% else %}{{ i.price|money(i.currency) }}{% endif %}
+            {% if i.price_type and i.price_type != 'list' %}<div class="muted small">{{ i.price_type }}</div>{% endif %}</td>
+        <td class="muted">{{ i.list_price|money(i.currency) }}</td>
+        <td class="muted">{{ i.lowest_seen|money(i.currency) }}</td>
+        <td>
+          <form method="post" action="{{ url_for('wishlist_target', asin=i.asin) }}" class="inline-form">
+            <input type="text" name="target" inputmode="decimal" size="6"
+                   value="{{ '%.2f'|format(i.target_price) if i.target_price is not none else '' }}"
+                   placeholder="{{ '%.2f'|format(price_default) if price_default is not none else 'none' }}"
+                   aria-label="Alert price for {{ i.title }}">
+            <button class="btn btn-small" type="submit">Set</button>
+          {{ csrf_field() }}</form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small">Leave a title's alert price blank to use the default.
+    You get one email when a title reaches its alert price, another only if
+    it drops further, and the alert re-arms once the price goes back up.</p>
+  {% else %}
+  <p class="muted">Your wishlist hasn't been read yet, or it's empty —
+    use “Refresh prices now”.</p>
+  {% endif %}
   {% endif %}
 {% elif tab == 'series' %}
   {% if series %}{{ watch_table(series) }}

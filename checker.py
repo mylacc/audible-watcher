@@ -531,8 +531,14 @@ def send_email(subject: str, html: str, text: str, settings: dict):
     sender = settings["email_from"] or user
     recipients = [r.strip() for r in (settings["email_to"] or user).split(",")
                   if r.strip()]
-    if not user or not password:
+    if bool(user) != bool(password):
         raise RuntimeError("SMTP username/app password not configured "
+                           "(see Settings page)")
+    if not user and not (sender and recipients):
+        # no sign-in (a local mail relay): nothing to fall back on
+        raise RuntimeError("SMTP username/app password not configured, and "
+                           "for a mail relay without sign-in both the From "
+                           "address and “Send notifications to” are needed "
                            "(see Settings page)")
 
     msg = MIMEMultipart("alternative")
@@ -546,15 +552,20 @@ def send_email(subject: str, html: str, text: str, settings: dict):
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
 
-    if settings.get("smtp_security", "ssl") == "starttls":
+    security = settings.get("smtp_security", "ssl")
+    if security in ("starttls", "none"):
+        # "none": plain SMTP, for a mail relay on your own network
         with smtplib.SMTP(host, port, timeout=30) as s:
-            s.starttls(context=ssl.create_default_context())
-            s.login(user, password)
+            if security == "starttls":
+                s.starttls(context=ssl.create_default_context())
+            if user:
+                s.login(user, password)
             s.sendmail(sender, recipients, msg.as_string())
     else:
         with smtplib.SMTP_SSL(host, port, timeout=30,
                               context=ssl.create_default_context()) as s:
-            s.login(user, password)
+            if user:
+                s.login(user, password)
             s.sendmail(sender, recipients, msg.as_string())
 
 
@@ -587,6 +598,16 @@ def explain_smtp_error(e: Exception) -> str:
     else:
         return detail
     return f"{hint} ({detail})"
+
+
+def email_ready(settings: dict) -> bool:
+    """Enough is filled in to send: an account and its app password, or
+    (a mail relay without sign-in) a From and a To address."""
+    if not settings.get("smtp_host"):
+        return False
+    if settings.get("smtp_user") or settings.get("smtp_password"):
+        return bool(settings.get("smtp_user") and settings.get("smtp_password"))
+    return bool(settings.get("email_from") and settings.get("email_to"))
 
 
 def send_new_release_email(books: list[dict], settings: dict):

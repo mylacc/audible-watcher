@@ -25,6 +25,11 @@ AUTH_FILE = os.path.join(DATA_DIR, "audible_auth.json")
 # our marketplace codes happen to match the audible package's locales
 LOCALES = {"us", "uk", "ca", "au", "de", "fr", "in", "it", "es", "jp"}
 ORDER_PAGES = 20  # 50 orders a page, newest first; pre-orders are recent
+WISHLIST_PAGE_SIZE = 50
+WISHLIST_PAGES = 40  # 2,000 titles: far beyond any real wishlist
+# the response groups the wishlist endpoint is documented to accept; an
+# unknown group fails the whole request
+WISHLIST_GROUPS = "contributors,media,price,product_attrs,product_desc"
 
 
 def _save_auth(auth):
@@ -136,6 +141,7 @@ def disconnect() -> bool:
                         exc_info=True)
         os.remove(AUTH_FILE)
     db.replace_owned([])
+    db.replace_wishlist([])
     return deregistered
 
 
@@ -237,3 +243,41 @@ def sync_library() -> int:
     db.replace_owned(rows)
     db.save_settings({"library_synced_at": db.now_iso()})
     return len(rows)
+
+
+def fetch_wishlist() -> list[dict]:
+    """The account's whole Audible wishlist as raw catalog products, with
+    prices. Raises if Amazon can't be asked, so a failed fetch never looks
+    like an empty wishlist.
+
+    Paging: stops at a short page, an empty page, total_results, or two
+    pages in a row that add nothing new. The last rule makes it safe
+    whether this endpoint counts pages from 0 or from 1 (one repeated
+    page is skipped, not mistaken for the end)."""
+    auth = audible.Authenticator.from_file(AUTH_FILE)
+    products: list[dict] = []
+    seen: set[str] = set()
+    try:
+        with audible.Client(auth=auth) as client:
+            idle = 0
+            for page in range(WISHLIST_PAGES):
+                data = client.get("1.0/wishlist",
+                                  num_results=WISHLIST_PAGE_SIZE, page=page,
+                                  response_groups=WISHLIST_GROUPS,
+                                  sort_by="-DateAdded")
+                batch = data.get("products") or data.get("items") or []
+                fresh = [p for p in batch
+                         if p.get("asin") and p["asin"] not in seen]
+                for p in fresh:
+                    seen.add(p["asin"])
+                products.extend(fresh)
+                total = data.get("total_results")
+                if (not batch or len(batch) < WISHLIST_PAGE_SIZE
+                        or (isinstance(total, int) and len(seen) >= total)):
+                    break
+                idle = 0 if fresh else idle + 1
+                if idle >= 2:
+                    break
+    finally:
+        _save_auth(auth)  # keep a refreshed access token either way
+    return products

@@ -2,7 +2,7 @@
 #   docker compose up -d      ->  http://<server>:5055
 services:
   audible-watcher:
-    build: .   # or skip building: image: ghcr.io/andrew911tt/audible-watcher:latest
+    build: .   # or skip building: image: ghcr.io/mylacc/audible-watcher:latest
     container_name: audible-watcher
     restart: unless-stopped
     ports: ["5055:5055"]

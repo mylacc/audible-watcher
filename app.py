@@ -28,6 +28,7 @@ import account
 import audible_api
 import checker
 import db
+import wishlist
 from paths import RESOURCE_DIR, check_data_dir_writable
 
 logging.basicConfig(level=logging.INFO,
@@ -404,6 +405,11 @@ def localtime_filter(value, fallback="never"):
     return when.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
+@app.template_filter("money")
+def money_filter(amount, currency=None) -> str:
+    return wishlist.format_price(amount, currency)
+
+
 @app.context_processor
 def inject_page_state():
     return {
@@ -425,6 +431,8 @@ def _run_check(trigger: str):
     try:
         result = checker.check_all(trigger=trigger)
         _refresh_library_if_stale()
+        if not result.get("aborted"):
+            wishlist.check(trigger)
         if result.get("aborted") and trigger != "retry":
             when = datetime.now() + RETRY_AFTER_OUTAGE
             scheduler.add_job(_retry_check, "date", run_date=when,
@@ -465,6 +473,18 @@ def scheduled_check():
         _run_check("scheduled")
 
 
+def scheduled_price_check():
+    """The extra wishlist-only check, half a day after the daily check, so
+    a one-day sale is caught whichever hour it starts."""
+    if not account.is_connected():
+        return
+    if _check_lock.acquire(blocking=False):
+        try:
+            wishlist.check("scheduled")
+        finally:
+            _check_lock.release()
+
+
 def _retry_check():
     if _check_lock.acquire(blocking=False):
         _run_check("retry")
@@ -492,7 +512,15 @@ def reschedule():
         pass
     scheduler.add_job(scheduled_check, CronTrigger(hour=hour, minute=0),
                       id="daily_check")
-    log.info("Daily check scheduled for %02d:00 local time", hour)
+    try:
+        scheduler.remove_job("price_check")
+    except JobLookupError:
+        pass
+    scheduler.add_job(scheduled_price_check,
+                      CronTrigger(hour=(hour + 12) % 24, minute=0),
+                      id="price_check")
+    log.info("Daily check scheduled for %02d:00 local time (wishlist prices "
+             "also at %02d:00)", hour, (hour + 12) % 24)
 
 
 # ------------------------------------------------------------------ pages
@@ -500,7 +528,7 @@ def reschedule():
 @app.route("/")
 def dashboard():
     tab = request.args.get("tab", "authors")
-    if tab not in ("authors", "series", "preorders", "library"):
+    if tab not in ("authors", "series", "preorders", "library", "wishlist"):
         tab = "authors"
     view = request.args.get("view", "all")
     if view not in ("all", "author", "series"):
@@ -524,7 +552,28 @@ def dashboard():
         series=[w for w in watches if w["type"] == "series"],
         preorders=db.preorder_books(),
         owned=owned, owned_total=db.owned_count(),
-        owned_groups=_group_owned(owned, view, sort))
+        owned_groups=_group_owned(owned, view, sort),
+        connected=account.is_connected(),
+        wishlist_total=db.wishlist_count(),
+        **(_wishlist_context(settings) if tab == "wishlist" else {}))
+
+
+def _wishlist_context(settings: dict) -> dict:
+    """The Wishlist tab: titles at or below their alert price first
+    (cheapest first), then the rest in wishlist order."""
+    default = wishlist.default_target(settings)
+    owned = db.owned_asins()
+    items = []
+    for i in db.wishlist_items():
+        i["target"] = wishlist.effective_target(i, default)
+        i["hit"] = wishlist.at_or_below(i, default)
+        i["owned"] = i["asin"] in owned
+        items.append(i)
+    items.sort(key=lambda i: (not i["hit"],
+                              i["price"] if i["hit"] else 0))
+    return {"wishlist_items": items, "price_default": default,
+            "wishlist_checked_at": settings.get("wishlist_checked_at"),
+            "wishlist_error": settings.get("wishlist_error")}
 
 
 # Library → All books: sort options (the first is the default)
@@ -716,7 +765,7 @@ def settings_page():
     if request.method == "POST":
         keys = ["marketplace", "language", "check_hour", "smtp_host",
                 "smtp_port", "smtp_security", "smtp_user", "email_from",
-                "email_to"]
+                "email_to", "price_threshold"]
         values = {k: request.form.get(k, "").strip() for k in keys}
         if _parse_hour(values["check_hour"]) is None:
             flash("Daily check time must be a whole hour from 0 to 23 — "
@@ -724,12 +773,20 @@ def settings_page():
             return redirect(url_for("settings_page"))
         values["check_hour"] = str(_parse_hour(values["check_hour"]))
         saved_now = db.get_settings()
-        for k in ("marketplace", "language", "smtp_security"):
+        for k in ("marketplace", "language", "smtp_security",
+                  "price_threshold"):
             if k not in request.form:  # not on the form: keep what's saved
                 values[k] = saved_now.get(k, "")
+        if values["price_threshold"]:
+            amount = wishlist.parse_amount(values["price_threshold"])
+            if amount is None:
+                flash("Wishlist alert price must be an amount such as 5 or "
+                      "4.99 — settings not saved", "error")
+                return redirect(url_for("settings_page"))
+            values["price_threshold"] = f"{amount:.2f}"
         if (values["marketplace"] not in audible_api.MARKETPLACES
                 or values["language"] not in ("", *audible_api.LANGUAGES)
-                or values["smtp_security"] not in ("ssl", "starttls")):
+                or values["smtp_security"] not in ("ssl", "starttls", "none")):
             flash("Unknown marketplace, language or security setting — "
                   "settings not saved", "error")
             return redirect(url_for("settings_page"))
@@ -757,7 +814,11 @@ def settings_page():
             "1" if request.form.get("lookup_publish_dates") else "0")
         marketplace_changed = (values["marketplace"]
                                != current.get("marketplace", "us"))
+        threshold_changed = (values["price_threshold"]
+                             != current.get("price_threshold", ""))
         db.save_settings(values)
+        if threshold_changed:
+            db.rearm_all_price_alerts()
         if marketplace_changed:
             db.reset_for_marketplace_change()
         reschedule()
@@ -767,13 +828,13 @@ def settings_page():
                   "watch for the new store; nothing will be flagged as "
                   "new.", "ok")
         saved = db.get_settings()
-        if values["email_enabled"] == "1" and not (saved.get("smtp_user")
-                                                   and saved.get("smtp_password")):
+        if values["email_enabled"] == "1" and not checker.email_ready(saved):
             flash("Email is switched on, but the email address or app "
                   "password is missing, so nothing can be sent yet. See "
                   "the setup steps under Email notifications.", "error")
         return redirect(url_for("settings_page"))
     return render_template("settings.html", settings=db.get_settings(),
+                           email_ready=checker.email_ready(db.get_settings()),
                            access=access_info(), **_account_context(),
                            marketplaces=sorted(audible_api.MARKETPLACES),
                            languages=audible_api.LANGUAGES)
@@ -899,6 +960,50 @@ def seen_all():
     db.mark_all_seen()
     flash("All new books marked as seen", "ok")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/wishlist/refresh", methods=["POST"])
+def wishlist_refresh():
+    """Re-read the wishlist and its prices now (alerts included)."""
+    back = url_for("dashboard", tab="wishlist")
+    if not account.is_connected():
+        flash("Connect your Audible account first (Settings)", "error")
+        return redirect(back)
+    if not _check_lock.acquire(blocking=False):
+        flash("A check is already running — try again in a minute", "error")
+        return redirect(back)
+    try:
+        result = wishlist.check("manual")
+    finally:
+        _check_lock.release()
+    if result["error"]:
+        flash(result["error"], "error")
+    else:
+        msg = f"Wishlist refreshed — {result['items']} title(s)"
+        if result["alerts"]:
+            msg += (f", {result['alerts']} newly at or below your alert price"
+                    + (" (emailed)" if result["email_sent"] else ""))
+        flash(msg, "ok")
+    return redirect(back)
+
+
+@app.route("/wishlist/<asin>/target", methods=["POST"])
+def wishlist_target(asin):
+    back = url_for("dashboard", tab="wishlist")
+    raw = (request.form.get("target") or "").strip()
+    target = None
+    if raw:
+        target = wishlist.parse_amount(raw)
+        if target is None:
+            flash("Alert price must be an amount such as 5 or 4.99", "error")
+            return redirect(back)
+    if not db.set_wishlist_target(asin, target):
+        flash("That title isn't on your wishlist any more", "error")
+    elif target is None:
+        flash("Alert price reset to your default", "ok")
+    else:
+        flash(f"Alert price set to {wishlist.format_price(target)}", "ok")
+    return redirect(back)
 
 
 def _account_context() -> dict:

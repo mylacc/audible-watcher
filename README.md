@@ -28,6 +28,12 @@ in Settings removes the app's device from your Amazon account and
 deletes the tokens; you can also revoke it from Amazon's "Manage Your
 Content and Devices".
 
+> **This fork** (mylacc/audible-watcher) adds two things to
+> [Andrew911tt/audible-watcher](https://github.com/Andrew911tt/audible-watcher):
+> [wishlist price alerts](#wishlist-price-alerts) and
+> [sending through a mail relay without sign-in](#mail-relay-without-sign-in).
+> Its Docker image is `ghcr.io/mylacc/audible-watcher`.
+
 > Audible Watcher is an independent open-source project. It is not
 > affiliated with or endorsed by Audible or Amazon.
 
@@ -99,7 +105,7 @@ A ready-made image is published with every release, so you only need a
 ```yaml
 services:
   audible-watcher:
-    image: ghcr.io/andrew911tt/audible-watcher:latest
+    image: ghcr.io/mylacc/audible-watcher:latest
     container_name: audible-watcher
     restart: unless-stopped
     ports: ["5055:5055"]
@@ -133,7 +139,7 @@ Requires Python 3.10+ ([python.org](https://www.python.org/downloads/) —
 on Windows, check "Add Python to PATH" during install).
 
 ```
-git clone https://github.com/Andrew911tt/audible-watcher.git
+git clone https://github.com/mylacc/audible-watcher.git
 cd audible-watcher
 pip install -r requirements.txt
 python app.py
@@ -175,6 +181,41 @@ sign-in for apps like this one.
 
 If a test email fails, the error message says what to fix (for example
 "use an app password, not your normal password").
+
+### Mail relay without sign-in
+
+If you run your own mail relay (for example a Postfix container on your
+NAS that forwards to your real mail provider), leave **Email address** and
+**App password** blank, set **Security** to *None* (plain SMTP, usually
+port 25) or *STARTTLS* if your relay offers it, and fill in both **From
+address** and **Send notifications to**. If you fill in an email address
+and app password, the app signs in as before.
+
+## Wishlist price alerts
+
+With your Audible account connected, the app reads your Audible wishlist
+and its current prices, and emails you when a title costs your alert
+price or less.
+
+- **Default alert price:** Settings → Monitoring → *Wishlist alert price*.
+  Blank means no default.
+- **Per-title prices:** the dashboard's **Wishlist** tab lists every title
+  with its price now, list price and lowest price seen; type a price next
+  to a title to override the default for it (blank = use the default).
+- **When it checks:** with the daily check, and again 12 hours later, so a
+  one-day sale is caught whenever it starts. *Refresh prices now* on the
+  Wishlist tab checks immediately.
+- **What "price" means:** Audible's *lowest price* for the title on your
+  account: a sale or member price when there is one, otherwise the list
+  price. Credit prices are ignored.
+- **No repeats:** one email when a title reaches its alert price, another
+  only if it gets cheaper still. Once its price goes back above the alert
+  price, the alert re-arms. Changing an alert price re-arms it too.
+  Titles you already own are skipped.
+- Email follows the same switch as new-release emails: with email off,
+  matches show only on the Wishlist tab.
+
+Disconnecting your Audible account deletes the stored wishlist.
 
 ## Run it automatically (source / server installs)
 

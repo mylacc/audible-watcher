@@ -276,3 +276,19 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 @media (max-width: 600px) { .panel { padding: 14px; } }
 .default-submit { position: absolute; left: -10000px; width: 1px;
   height: 1px; overflow: hidden; }
+
+/* Wishlist tab */
+.inline-form { display: flex; gap: 6px; align-items: center; margin: 0; }
+.inline-form input { width: 6em; }
+.wishlist-table td { vertical-align: middle; }
+.wishlist-table img { border-radius: 4px; display: block; }
+@media (max-width: 600px) {
+  /* phones: drop cover, list price and lowest-seen columns */
+  .wishlist-table th:nth-child(1), .wishlist-table td:nth-child(1),
+  .wishlist-table th:nth-child(4), .wishlist-table td:nth-child(4),
+  .wishlist-table th:nth-child(5), .wishlist-table td:nth-child(5) {
+    display: none; }
+  .wishlist-table th, .wishlist-table td { padding: 8px 6px; }
+  .inline-form input { width: 4.5em; }
+}
+@media (max-width: 600px) { .view-toggle.tabs { flex-wrap: wrap; } }
