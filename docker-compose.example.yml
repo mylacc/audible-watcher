@@ -1,13 +1,18 @@
-# Copy to docker-compose.yml, set your time zone (the daily check runs at local time), then:
-#   docker compose up -d      ->  http://<server>:5055
+# Lives one folder above the clone (see README "Install"):
+#   audible-watcher/docker-compose.yml   <- this file, your copy
+#   audible-watcher/data/                <- your data
+#   audible-watcher/src/                 <- the git clone
+# Start or rebuild after an update:  docker compose up -d --build
 services:
   audible-watcher:
-    build: .   # or skip building: image: ghcr.io/mylacc/audible-watcher:latest
+    build: ./src
+    image: audible-watcher:local   # built here; never pulled from a registry
+    pull_policy: build
     container_name: audible-watcher
     restart: unless-stopped
     ports: ["5055:5055"]
     environment:
-      - TZ=America/Los_Angeles
+      - TZ=America/New_York        # the daily check runs at local time
       # - AW_ALLOWED_HOSTS=nas.example.com   # if you open it by a full domain name
       # - AW_PASSWORD=change-me             # require a password to open the app
     volumes:

@@ -33,8 +33,8 @@ Content and Devices".
 > [wishlist price alerts](#wishlist-price-alerts) and
 > [sending through a mail relay without sign-in](#mail-relay-without-sign-in),
 > and drops the upstream Windows installer, desktop tray app and
-> run-from-source setups: it's Docker only. Its image is
-> `ghcr.io/mylacc/audible-watcher`.
+> run-from-source setups: it's Docker only, built on your own server from
+> this repository (no published image).
 
 > Audible Watcher is an independent open-source project. It is not
 > affiliated with or endorsed by Audible or Amazon.
@@ -82,33 +82,37 @@ Content and Devices".
 
 ## Install (Docker)
 
-A ready-made image is published with every release, so you only need a
-`docker-compose.yml`:
-
-```yaml
-services:
-  audible-watcher:
-    image: ghcr.io/mylacc/audible-watcher:latest
-    container_name: audible-watcher
-    restart: unless-stopped
-    ports: ["5055:5055"]
-    environment:
-      - TZ=America/Los_Angeles   # your time zone: the daily check uses it
-    volumes:
-      - ./data:/data
-```
+The image is built on your server from this repository; nothing is pulled
+from a registry except the Python base image.
 
 ```
+git clone https://github.com/mylacc/audible-watcher.git src
+cp src/docker-compose.example.yml docker-compose.yml   # then edit it
 mkdir -p data && sudo chown 1000:1000 data
-docker compose up -d
+docker compose up -d --build
 ```
 
-Then open **http://your-server:5055**. Data is kept in `./data`. To update
-later: `docker compose pull && docker compose up -d`.
+That gives you this layout, with your settings and data outside the
+clone so updating never touches them:
 
-Prefer to build it yourself? Clone the repository, copy
-`docker-compose.example.yml` to `docker-compose.yml` (it builds from
-source) and run `docker compose up -d`.
+```
+audible-watcher/
+├── docker-compose.yml   # yours: time zone, password, hostnames
+├── data/                # watcher.db, audible_auth.json
+└── src/                 # this repository
+```
+
+Then open **http://your-server:5055**.
+
+**Updating:**
+
+```
+git -C src pull
+docker compose up -d --build
+```
+
+To stay on a known version instead of the newest commit, check out a tag
+or commit in `src` (`git -C src checkout <tag>`) before rebuilding.
 
 ## Set up email
 
@@ -324,10 +328,7 @@ GitHub Actions, or locally with:
 AW_LIVE_TESTS=1 python -m pytest live_tests
 ```
 
-**Releases:** pushing a tag like `v1.0.0` makes GitHub Actions run the
-tests and the Docker check, then publish the image to
-`ghcr.io/mylacc/audible-watcher` as `:1.0.0` and `:latest`. Nothing is
-published if any test fails.
+No image is published: each server builds its own from the source.
 
 ## License
 
