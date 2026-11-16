@@ -5,6 +5,11 @@ watcher.db*
 audible_auth.json
 *.bak
 *.log
+# local Docker setup: holds your password, hostnames and data
+data/
+docker-compose.yml
+.env
+*.env
 
 # Python / build
 __pycache__/
