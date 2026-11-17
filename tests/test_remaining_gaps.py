@@ -111,7 +111,7 @@ def test_send_email_over_starttls(smtp):
 
 
 def test_missing_credentials_are_explained(smtp):
-    with pytest.raises(RuntimeError, match="not configured"):
+    with pytest.raises(RuntimeError, match="half filled in"):
         checker.send_email("S", "h", "t", dict(SETTINGS, smtp_password=""))
     assert smtp == []
 

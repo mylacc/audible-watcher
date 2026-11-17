@@ -116,8 +116,10 @@
     <p class="help-text">After each check (daily, or when you click
       <em>Check Audible now</em>), Audible Watcher sends <strong>one digest
       email</strong> listing any new books from your watched authors and
-      series. No new books, no email. It sends through your own email
-      account, so the message comes from you, to you.</p>
+      series. No new books, no email. It sends through your <strong>mail
+      relay</strong>: an SMTP server on your own network, such as a Postfix
+      container on your NAS, that passes the mail on to your real mail
+      provider.</p>
 
     <div class="notice email-status">
       {% if settings.email_enabled == '1' and email_ready %}
@@ -128,83 +130,29 @@
         ⏸️ <strong>Set up but switched off</strong> — tick
         “Send me an email” below and save to turn it on.
       {% else %}
-        ✉️ <strong>Not set up yet.</strong> Follow the steps below — it takes
-        about 5 minutes.
+        ✉️ <strong>Not set up yet.</strong> Fill in your mail relay below.
       {% endif %}
     </div>
 
     <details class="help-box" {% if not email_ready %}open{% endif %}>
-      <summary>How to set up Gmail (step by step)</summary>
-      <p class="muted small">Gmail doesn't let apps use your normal password.
-        Instead you create an <strong>app password</strong>: a 16-letter
-        password just for Audible Watcher that you can revoke anytime
-        without changing your real password.</p>
+      <summary>How to point it at your mail relay</summary>
       <ol class="steps">
-        <li><strong>Turn on 2-Step Verification</strong> (app passwords
-          require it). Open
-          <a href="https://myaccount.google.com/signinoptions/twosv"
-             target="_blank" rel="noopener">Google Account → 2-Step
-          Verification</a>, sign in, and follow the prompts. Skip this if
-          it's already on.</li>
-        <li><strong>Create the app password.</strong> Open
-          <a href="https://myaccount.google.com/apppasswords"
-             target="_blank" rel="noopener">Google Account → App
-          passwords</a>, type the name <code>Audible Watcher</code>, and
-          click <em>Create</em>.</li>
-        <li><strong>Copy the 16-letter code</strong> Google shows (it looks
-          like <code>abcd efgh ijkl mnop</code>). Google only shows it once;
-          if you lose it, just delete it and create a new one.</li>
-        <li><strong>Fill in the form below:</strong>
-          <ul>
-            <li>SMTP server <code>smtp.gmail.com</code>, port
-              <code>465</code>, security <em>SSL</em> (already filled in
-              by default).</li>
-            <li>Email address: your full Gmail address.</li>
-            <li>App password: paste the code (spaces are fine).</li>
-            <li>Send notifications to: where you want the emails — your
-              Gmail address or any other address.</li>
-          </ul></li>
+        <li><strong>Mail relay:</strong> the relay's address as this
+          container sees it. For a relay on the same NAS, use the NAS's LAN
+          IP address, not <code>localhost</code> (inside a container that's
+          the container itself), with the port the relay is published on.</li>
+        <li><strong>Security:</strong> <em>None</em> (plain SMTP on your own
+          network), or <em>STARTTLS</em> if your relay offers it.</li>
+        <li><strong>From address:</strong> a sender your relay accepts.
+          Relays often allow only your own domain.</li>
+        <li><strong>Send notifications to:</strong> where you want the
+          emails.</li>
         <li><strong>Tick “Send me an email…”</strong>, click
-          <em>Save settings</em>, then click <em>Send test email</em>.
-          The test should arrive within a minute (check Spam the first
-          time, and mark it “Not spam”).</li>
+          <em>Save settings</em>, then click <em>Send test email</em>.</li>
       </ol>
-      <p class="muted small">Google Workspace (work or school) accounts: your
-        administrator may have turned app passwords off. If the App
-        passwords page says it isn't available, use a personal Gmail
-        account instead.</p>
-    </details>
-
-    <details class="help-box">
-      <summary>Using a different email provider</summary>
-      <p class="muted small">Any provider that supports SMTP works. Click
-        one to fill in its server settings, then enter your address and an
-        app password from that provider.</p>
-      <table class="provider-table">
-        <thead><tr><th>Provider</th><th>SMTP server</th><th>Port</th>
-          <th>Security</th><th></th></tr></thead>
-        <tbody>
-          {% for name, host, port, sec in [
-              ("Gmail", "smtp.gmail.com", "465", "ssl"),
-              ("Yahoo Mail", "smtp.mail.yahoo.com", "465", "ssl"),
-              ("iCloud Mail", "smtp.mail.me.com", "587", "starttls"),
-              ("Fastmail", "smtp.fastmail.com", "465", "ssl"),
-              ("Zoho Mail", "smtp.zoho.com", "465", "ssl")] %}
-          <tr>
-            <td>{{ name }}</td><td><code>{{ host }}</code></td>
-            <td>{{ port }}</td><td>{{ 'SSL' if sec == 'ssl' else 'STARTTLS' }}</td>
-            <td><button class="btn btn-small js-preset" type="button"
-                        data-host="{{ host }}" data-port="{{ port }}"
-                        data-security="{{ sec }}">Use</button></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <p class="muted small">Yahoo, iCloud and Fastmail all require an
-        app-specific password, created in that provider's account security
-        settings, just like Gmail. Outlook.com / Hotmail is not listed:
-        Microsoft has been phasing out password sign-in for apps like this
-        one, so it usually won't work.</p>
+      <p class="muted small">The relay also has to accept mail from this
+        container's network. If it only allows certain networks, add the
+        Docker networks to that list.</p>
     </details>
 
     <label class="checkbox">
@@ -212,52 +160,54 @@
              {% if settings.email_enabled == '1' %}checked{% endif %}>
       Send me an email when new books are found
     </label>
-    <label>SMTP server
+    <label>Mail relay
       <input type="text" name="smtp_host" value="{{ settings.smtp_host }}"
-             placeholder="smtp.gmail.com">
-      <span class="muted small">Your provider's outgoing mail server. For
-        Gmail: <code>smtp.gmail.com</code>.</span>
+             placeholder="192.168.1.10">
+      <span class="muted small">The relay's IP address or host name, as
+        this container sees it.</span>
     </label>
     <label>Port
       <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"
-             placeholder="465">
-      <span class="muted small">Must match the security setting: usually
-        465 for SSL, 587 for STARTTLS.</span>
+             placeholder="25">
+      <span class="muted small">The port the relay listens on (25 unless
+        it's published on another one).</span>
     </label>
     <label>Security
       <select name="smtp_security">
-        <option value="ssl" {% if settings.smtp_security == 'ssl' %}selected{% endif %}>SSL (port 465)</option>
-        <option value="starttls" {% if settings.smtp_security == 'starttls' %}selected{% endif %}>STARTTLS (port 587)</option>
-        <option value="none" {% if settings.smtp_security == 'none' %}selected{% endif %}>None — mail relay on your own network (port 25)</option>
+        <option value="none" {% if settings.smtp_security == 'none' %}selected{% endif %}>None — plain SMTP on your own network</option>
+        <option value="starttls" {% if settings.smtp_security == 'starttls' %}selected{% endif %}>STARTTLS</option>
+        <option value="ssl" {% if settings.smtp_security == 'ssl' %}selected{% endif %}>SSL/TLS</option>
       </select>
     </label>
-    <label>Email address (SMTP username)
-      <input type="email" name="smtp_user" value="{{ settings.smtp_user }}"
-             placeholder="you@gmail.com" autocomplete="username">
-      <span class="muted small">The full address of the account that sends
-        the emails.</span>
-    </label>
-    <label>App password
-      <input type="password" name="smtp_password" autocomplete="new-password"
-             placeholder="{% if settings.smtp_password %}•••••••• saved (leave blank to keep){% else %}16-letter app password{% endif %}">
-      <span class="muted small">Not your normal email password — see the
-        steps above. It's stored only in this app's database on this
-        machine. For your security, if you change the server or email
-        address, you'll be asked to enter it again.</span>
+    <label>From address
+      <input type="text" name="email_from" value="{{ settings.email_from }}"
+             placeholder="alerts@example.com">
+      <span class="muted small">Required. Must be a sender your relay
+        accepts.</span>
     </label>
     <label>Send notifications to
       <input type="text" name="email_to" value="{{ settings.email_to }}"
              placeholder="you@example.com (comma-separate multiple)">
-      <span class="muted small">Leave blank to send to the address above.
-        Separate several addresses with commas.</span>
+      <span class="muted small">Required. Separate several addresses with
+        commas.</span>
     </label>
-    <label>From address (optional)
-      <input type="text" name="email_from" value="{{ settings.email_from }}"
-             placeholder="defaults to the address above">
-      <span class="muted small">Usually leave blank. Gmail always sends from
-        your own address anyway. Required for a mail relay without sign-in
-        (leave the email address and app password blank for that).</span>
-    </label>
+
+    <details class="help-box relay-login" {% if settings.smtp_user %}open{% endif %}>
+      <summary>Only if your relay needs a login</summary>
+      <p class="muted small">Relays on your own network usually accept mail
+        without one. Leave both blank unless yours asks for a login.</p>
+      <label>Username
+        <input type="text" name="smtp_user" value="{{ settings.smtp_user }}"
+               autocomplete="username">
+      </label>
+      <label>Password
+        <input type="password" name="smtp_password" autocomplete="new-password"
+               placeholder="{% if settings.smtp_password %}•••••••• saved (leave blank to keep){% endif %}">
+        <span class="muted small">Stored only in this app's database. For
+          your security, if you change the relay or the username, you'll be
+          asked to enter it again.</span>
+      </label>
+    </details>
 
     <div class="panel-actions">
       <button class="btn" type="submit" formaction="{{ url_for('test_email') }}"
@@ -270,23 +220,24 @@
     <details class="help-box troubleshooting">
       <summary>Email not working? Troubleshooting</summary>
       <dl>
-        <dt>“Username and password not accepted” / authentication failed</dt>
-        <dd>You probably entered your normal password. Create an app password
-          (steps above) and paste it in. Also check the email address is
-          complete (<code>you@gmail.com</code>, not just <code>you</code>).</dd>
+        <dt>“Could not connect” / connection refused</dt>
+        <dd>Check the relay address and port. From a container, use the
+          NAS's LAN IP and the port the relay is published on, not
+          <code>localhost</code>.</dd>
+        <dt>“Name not found”</dt>
+        <dd>The relay's host name has a typo, or this container can't look
+          it up. Use its IP address instead.</dd>
+        <dt>“Relay access denied”, or the From or To address refused</dt>
+        <dd>The relay doesn't accept this sender or this container's
+          network. Use a From address on a domain the relay allows, and
+          allow the Docker networks in the relay's settings.</dd>
         <dt>“Wrong version number”, SSL errors, or the test hangs</dt>
-        <dd>The port and security setting don't match. Use port 465 with SSL,
-          or port 587 with STARTTLS.</dd>
-        <dt>“Could not connect” / name not found</dt>
-        <dd>Check the SMTP server name for typos. If this app runs on a home
-          server or NAS, make sure it can reach the internet and that your
-          network doesn't block outgoing mail ports.</dd>
+        <dd>The security setting doesn't match the relay. A plain relay on
+          your own network needs <em>None</em>.</dd>
         <dt>Test says it was sent, but nothing arrives</dt>
-        <dd>Look in Spam/Junk and mark it “Not spam”. Check the “Send
-          notifications to” address for typos.</dd>
-        <dt>It worked before and suddenly stopped</dt>
-        <dd>Changing your Google password revokes all app passwords. Create a
-          new one and paste it in.</dd>
+        <dd>The relay took it. Check the relay's log (for a container,
+          <code>docker logs</code> on it) to see whether it was passed on or
+          refused, and look in Spam/Junk.</dd>
       </dl>
     </details>
   </section>
@@ -355,18 +306,5 @@
     </tr>
   </table>
 </section>
-
-<script>
-// "Use" buttons in the provider table fill in that provider's server settings
-document.querySelectorAll('.js-preset').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    var form = document.querySelector('.settings-form');
-    form.smtp_host.value = btn.dataset.host;
-    form.smtp_port.value = btn.dataset.port;
-    form.smtp_security.value = btn.dataset.security;
-    form.smtp_user.focus();
-  });
-});
-</script>
 
 {% endblock %}

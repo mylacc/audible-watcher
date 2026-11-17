@@ -268,7 +268,8 @@ def test_message_id_with_display_name_from(monkeypatch):
             captured["msg"] = message
     monkeypatch.setattr(checker.smtplib, "SMTP_SSL", FakeSMTP)
     checker.send_email("S", "<p>h</p>", "t", {
-        "smtp_host": "h", "smtp_port": "465", "smtp_user": "me@example.com",
+        "smtp_host": "h", "smtp_port": "465", "smtp_security": "ssl",
+        "smtp_user": "me@example.com",
         "smtp_password": "pw", "email_to": "",
         "email_from": "Audible Watcher <me@example.com>"})
     line = next(l for l in captured["msg"].splitlines()

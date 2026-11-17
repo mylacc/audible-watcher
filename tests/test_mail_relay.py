@@ -36,8 +36,25 @@ def test_relay_still_logs_in_when_credentials_are_given(smtp):  # noqa: F811
 
 @pytest.mark.parametrize("missing", ["email_from", "email_to"])
 def test_relay_needs_from_and_to(smtp, missing):  # noqa: F811
-    with pytest.raises(RuntimeError, match="not configured"):
+    with pytest.raises(RuntimeError, match="not set up"):
         checker.send_email("S", "h", "t", dict(RELAY, **{missing: ""}))
+    assert smtp == []
+
+
+def test_no_port_defaults_by_security(smtp):  # noqa: F811
+    checker.send_email("S", "h", "t", dict(RELAY, smtp_port=""))
+    assert smtp[0].port == 25
+
+
+def test_relay_without_address_is_refused(smtp):  # noqa: F811
+    with pytest.raises(RuntimeError, match="enter its address"):
+        checker.send_email("S", "h", "t", dict(RELAY, smtp_host=""))
+    assert smtp == []
+
+
+def test_relay_half_login_is_refused(smtp):  # noqa: F811
+    with pytest.raises(RuntimeError, match="half filled in"):
+        checker.send_email("S", "h", "t", dict(RELAY, smtp_user="u"))
     assert smtp == []
 
 

@@ -1,4 +1,4 @@
-"""Email section of the Settings page: setup directions, status, friendly
+"""Email section of the Settings page: mail relay setup, status, friendly
 errors."""
 import smtplib
 import socket
@@ -7,57 +7,81 @@ import ssl
 import checker
 import db
 
-GMAIL = {"check_hour": "8", "smtp_host": "smtp.gmail.com",
-         "smtp_port": "465", "smtp_security": "ssl",
-         "smtp_user": "me@gmail.com"}
+RELAY = {"check_hour": "8", "smtp_host": "192.0.2.10", "smtp_port": "25",
+         "smtp_security": "none", "smtp_user": "",
+         "email_from": "alerts@example.com", "email_to": "me@example.com"}
 
 
-def test_unconfigured_page_shows_setup_steps(client):
+def test_unconfigured_page_shows_relay_steps(client):
     html = client.get("/settings").get_data(as_text=True)
     assert "Not set up yet" in html
-    assert "https://myaccount.google.com/apppasswords" in html
-    assert "https://myaccount.google.com/signinoptions/twosv" in html
-    # the Gmail steps start expanded when email isn't set up
+    # the relay steps start expanded when email isn't set up
     assert '<details class="help-box" open>' in html
+    assert "How to point it at your mail relay" in html
     assert "Troubleshooting" in html
-    assert "smtp.mail.yahoo.com" in html  # other providers listed
+    # relay only: no mail-provider sign-up guides or presets
+    lower = html.lower()
+    for gone in ("gmail", "myaccount.google.com", "app password",
+                 "yahoo", "icloud", "fastmail", "zoho", "js-preset"):
+        assert gone not in lower, gone
+
+
+def test_defaults_are_a_plain_relay(client):
+    s = db.get_settings()
+    assert (s["smtp_host"], s["smtp_port"], s["smtp_security"]) == ("", "25", "none")
+    html = client.get("/settings").get_data(as_text=True)
+    assert '<option value="none" selected>' in html
 
 
 def test_configured_page_shows_status(client):
-    client.post("/settings", data={**GMAIL, "email_enabled": "on",
-                                   "smtp_password": "abcdefghijklmnop"})
+    client.post("/settings", data={**RELAY, "email_enabled": "on"})
     html = client.get("/settings").get_data(as_text=True)
-    assert "sending to" in html and "me@gmail.com" in html
+    assert "sending to" in html and "me@example.com" in html
+    assert "via 192.0.2.10" in html
     assert '<details class="help-box" open>' not in html  # steps collapsed
+    assert '<details class="help-box relay-login" >' in html  # no login: closed
 
 
-def test_app_password_spaces_are_removed(client):
-    client.post("/settings", data={**GMAIL,
-                                   "smtp_password": "abcd efgh ijkl mnop"})
-    assert db.get_settings()["smtp_password"] == "abcdefghijklmnop"
+def test_relay_login_box_opens_when_a_login_is_saved(client):
+    client.post("/settings", data={**RELAY, "smtp_user": "u",
+                                   "smtp_password": "p"})
+    html = client.get("/settings").get_data(as_text=True)
+    assert '<details class="help-box relay-login" open>' in html
 
 
-def test_enabling_email_without_password_warns(client):
-    resp = client.post("/settings", data={**GMAIL, "email_enabled": "on"},
+def test_password_keeps_inner_spaces(client):
+    client.post("/settings", data={**RELAY, "smtp_user": "u",
+                                   "smtp_password": "  pass phrase  "})
+    assert db.get_settings()["smtp_password"] == "pass phrase"
+
+
+def test_enabling_email_without_from_warns(client):
+    resp = client.post("/settings", data={**RELAY, "email_from": "",
+                                          "email_enabled": "on"},
                        follow_redirects=True)
-    assert "app password is missing" in resp.get_data(as_text=True)
+    assert "isn&#39;t fully set up" in resp.get_data(as_text=True)
 
 
 def test_test_email_failure_explains_the_fix(client, monkeypatch):
     def reject(*a, **k):
-        raise smtplib.SMTPAuthenticationError(
-            535, b"Username and Password not accepted")
+        raise smtplib.SMTPAuthenticationError(535, b"Authentication failed")
     monkeypatch.setattr(checker, "send_email", reject)
     resp = client.post("/test-email", follow_redirects=True)
     html = resp.get_data(as_text=True)
-    assert "Test email failed" in html and "app password" in html
+    assert "Test email failed" in html and "usually need no login" in html
 
 
 def test_explain_smtp_error_hints():
-    assert "port and security" in checker.explain_smtp_error(
+    assert "None" in checker.explain_smtp_error(
         ssl.SSLError("WRONG_VERSION_NUMBER"))
-    assert "server name" in checker.explain_smtp_error(
+    assert "IP address" in checker.explain_smtp_error(
         socket.gaierror("Name or service not known"))
+    assert "localhost" in checker.explain_smtp_error(
+        ConnectionRefusedError("refused"))
+    assert "From address" in checker.explain_smtp_error(
+        smtplib.SMTPSenderRefused(553, b"Sender address rejected", "x@y"))
+    assert "network" in checker.explain_smtp_error(
+        smtplib.SMTPRecipientsRefused({"me@example.com": (554, b"Relay access denied")}))
     assert checker.explain_smtp_error(ValueError("odd")) == "odd"
 
 
@@ -85,3 +109,14 @@ def test_test_email_button_posts_from_the_settings_form(client, monkeypatch):
                                             "check_hour": "8"})
     assert resp.status_code == 302 and len(sent) == 1
     assert sent[0]["smtp_host"] == db.get_settings()["smtp_host"]  # saved ones
+
+
+def test_favicon_on_every_page(client):
+    for path in ("/", "/settings", "/search"):
+        html = client.get(path).get_data(as_text=True)
+        assert 'rel="icon" type="image/svg+xml" href="/static/favicon.svg"' in html
+        assert 'rel="apple-touch-icon" href="/static/apple-touch-icon.png"' in html
+    for f, kind in (("favicon.svg", "image/svg+xml"), ("favicon-32.png", "image/png"),
+                    ("apple-touch-icon.png", "image/png")):
+        resp = client.get(f"/static/{f}")
+        assert resp.status_code == 200 and resp.mimetype == kind

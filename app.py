@@ -792,22 +792,20 @@ def settings_page():
             return redirect(url_for("settings_page"))
         port = values["smtp_port"]
         if port and not (port.isdigit() and 1 <= int(port) <= 65535):
-            flash("SMTP port must be a number such as 465 or 587 — "
+            flash("Port must be a number such as 25 or 587 — "
                   "settings not saved", "error")
             return redirect(url_for("settings_page"))
         current = db.get_settings()
-        # Google shows app passwords as "abcd efgh ijkl mnop"; the spaces
-        # aren't part of it
-        pw = "".join(request.form.get("smtp_password", "").split())
+        pw = request.form.get("smtp_password", "").strip()
         if pw:  # blank = keep existing...
             values["smtp_password"] = pw
         elif (values["smtp_host"] != current.get("smtp_host")
               or values["smtp_user"] != current.get("smtp_user")):
             # ...but only for the server/account it was entered for, so the
-            # saved app password can never be redirected to another server
+            # saved password can never be redirected to another server
             values["smtp_password"] = ""
             if current.get("smtp_password"):
-                flash("Mail server or username changed — enter the app "
+                flash("Mail relay or username changed — enter the "
                       "password again", "error")
         values["email_enabled"] = "1" if request.form.get("email_enabled") else "0"
         values["lookup_publish_dates"] = (
@@ -829,9 +827,10 @@ def settings_page():
                   "new.", "ok")
         saved = db.get_settings()
         if values["email_enabled"] == "1" and not checker.email_ready(saved):
-            flash("Email is switched on, but the email address or app "
-                  "password is missing, so nothing can be sent yet. See "
-                  "the setup steps under Email notifications.", "error")
+            flash("Email is switched on, but the mail relay isn't fully "
+                  "set up (it needs the relay, a From address and “Send "
+                  "notifications to”), so nothing can be sent yet. See "
+                  "Email notifications.", "error")
         return redirect(url_for("settings_page"))
     return render_template("settings.html", settings=db.get_settings(),
                            email_ready=checker.email_ready(db.get_settings()),

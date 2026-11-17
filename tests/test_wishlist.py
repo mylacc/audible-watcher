@@ -354,7 +354,7 @@ def test_refresh_needs_an_account(client):
     assert "Connect your Audible account first" in resp.get_data(as_text=True)
 
 
-SETTINGS_FORM = {"check_hour": "8", "smtp_host": "smtp.gmail.com",
+SETTINGS_FORM = {"check_hour": "8", "smtp_host": "relay.example",
                  "smtp_port": "465", "smtp_security": "ssl",
                  "smtp_user": "", "marketplace": "us", "language": ""}
 

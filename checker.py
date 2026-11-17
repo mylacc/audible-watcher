@@ -525,20 +525,24 @@ def build_email(books: list[dict]) -> tuple[str, str, str]:
 
 def send_email(subject: str, html: str, text: str, settings: dict):
     host = settings["smtp_host"]
-    port = int(settings["smtp_port"] or 465)
+    security = settings.get("smtp_security") or "none"
+    port = int(settings["smtp_port"]
+               or {"ssl": 465, "starttls": 587}.get(security, 25))
     user = settings["smtp_user"]
     password = settings["smtp_password"]
     sender = settings["email_from"] or user
     recipients = [r.strip() for r in (settings["email_to"] or user).split(",")
                   if r.strip()]
+    if not host:
+        raise RuntimeError("Mail relay not set up: enter its address "
+                           "(see Settings page)")
     if bool(user) != bool(password):
-        raise RuntimeError("SMTP username/app password not configured "
+        raise RuntimeError("Relay login half filled in: enter both the "
+                           "username and the password, or leave both blank "
                            "(see Settings page)")
     if not user and not (sender and recipients):
-        # no sign-in (a local mail relay): nothing to fall back on
-        raise RuntimeError("SMTP username/app password not configured, and "
-                           "for a mail relay without sign-in both the From "
-                           "address and “Send notifications to” are needed "
+        raise RuntimeError("Mail relay not set up: the From address and "
+                           "“Send notifications to” are both needed "
                            "(see Settings page)")
 
     msg = MIMEMultipart("alternative")
@@ -552,7 +556,6 @@ def send_email(subject: str, html: str, text: str, settings: dict):
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
 
-    security = settings.get("smtp_security", "ssl")
     if security in ("starttls", "none"):
         # "none": plain SMTP, for a mail relay on your own network
         with smtplib.SMTP(host, port, timeout=30) as s:
@@ -573,36 +576,41 @@ def explain_smtp_error(e: Exception) -> str:
     """The error plus a plain-language hint about what to fix in Settings."""
     detail = str(e) or type(e).__name__
     if isinstance(e, smtplib.SMTPAuthenticationError):
-        hint = ("the mail server rejected the email address or password. "
-                "Use an app password, not your normal password, and the "
-                "full email address as the username")
+        hint = ("the mail relay rejected the username or password. Relays "
+                "on your own network usually need no login: leave both "
+                "blank unless yours asks for one")
     elif isinstance(e, ssl.SSLCertVerificationError):
-        hint = ("the mail server's security certificate couldn't be "
-                "verified. Check the server name is exactly right (for "
-                "Gmail: smtp.gmail.com) and that this computer's date and "
-                "time are correct")
+        hint = ("the mail relay's security certificate couldn't be "
+                "verified. Check its name is exactly right, or set "
+                "Security to None for a plain relay on your own network")
     elif isinstance(e, ssl.SSLError):
-        hint = ("the port and security setting don't match. Use port 465 "
-                "with SSL, or port 587 with STARTTLS")
+        hint = ("the security setting doesn't match the relay. A plain "
+                "relay on your own network needs Security set to None")
     elif isinstance(e, socket.gaierror):
-        hint = "the SMTP server name wasn't found. Check it for typos"
+        hint = ("the mail relay's name wasn't found. Check it for typos, "
+                "or use its IP address")
     elif isinstance(e, (TimeoutError, socket.timeout)):
-        hint = ("the mail server didn't answer. Check the port and security "
-                "setting, and that this machine can reach the internet")
+        hint = ("the mail relay didn't answer. Check its address, port and "
+                "security setting")
     elif isinstance(e, (ConnectionError, smtplib.SMTPConnectError,
                         smtplib.SMTPServerDisconnected)):
-        hint = ("couldn't connect to the mail server. Check the server name, "
-                "port and security setting")
+        hint = ("couldn't connect to the mail relay. Check its address and "
+                "port; from a container, use the NAS's LAN IP, not "
+                "localhost")
+    elif isinstance(e, smtplib.SMTPSenderRefused):
+        hint = ("the relay refused the From address. Use a sender on a "
+                "domain the relay accepts")
     elif isinstance(e, smtplib.SMTPRecipientsRefused):
-        hint = "the “Send notifications to” address was refused. Check it"
+        hint = ("the relay refused the “Send notifications to” address, or "
+                "doesn't accept mail from this container's network")
     else:
         return detail
     return f"{hint} ({detail})"
 
 
 def email_ready(settings: dict) -> bool:
-    """Enough is filled in to send: an account and its app password, or
-    (a mail relay without sign-in) a From and a To address."""
+    """Enough is filled in to send: a relay, a From and a To address (or,
+    for a relay that needs a login, a username and password)."""
     if not settings.get("smtp_host"):
         return False
     if settings.get("smtp_user") or settings.get("smtp_password"):

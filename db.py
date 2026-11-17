@@ -139,9 +139,9 @@ CREATE TABLE IF NOT EXISTS check_log (
 DEFAULT_SETTINGS = {
     "marketplace": "us",
     "check_hour": "8",           # local hour of daily check
-    "smtp_host": "smtp.gmail.com",
-    "smtp_port": "465",
-    "smtp_security": "ssl",      # ssl | starttls
+    "smtp_host": "",             # your mail relay
+    "smtp_port": "25",
+    "smtp_security": "none",     # none | starttls | ssl
     "smtp_user": "",
     "smtp_password": "",
     "email_from": "",

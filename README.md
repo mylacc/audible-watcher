@@ -31,7 +31,7 @@ Content and Devices".
 > **This fork** (mylacc/audible-watcher) adds two things to
 > [Andrew911tt/audible-watcher](https://github.com/Andrew911tt/audible-watcher):
 > [wishlist price alerts](#wishlist-price-alerts) and
-> [sending through a mail relay without sign-in](#mail-relay-without-sign-in),
+> [sending through your own mail relay](#set-up-email),
 > and drops the upstream Windows installer, desktop tray app and
 > run-from-source setups: it's Docker only, built on your own server from
 > this repository (no published image).
@@ -50,8 +50,8 @@ Content and Devices".
   Watching a series also watches its author.
 - **Daily automatic check** (time configurable) plus a "Check Audible now"
   button that runs in the background while the page updates itself.
-- **Email digest** via Gmail or any other email provider when new titles
-  appear, with step-by-step setup on the Settings page.
+- **Email digest** through your own mail relay (for example a Postfix
+  container on your NAS) when new titles appear.
 - **No false alarms**:
   - When you add a watch, everything currently on Audible is recorded as a
     baseline. Only titles that appear *after* that are flagged.
@@ -116,41 +116,27 @@ or commit in `src` (`git -C src checkout <tag>`) before rebuilding.
 
 ## Set up email
 
-The **Settings** page walks you through this step by step, with links to
-the right Google pages and a troubleshooting list. In short, for Gmail:
+Audible Watcher sends through a **mail relay** on your own network: an SMTP
+server, such as a Postfix container on your NAS, that accepts mail without
+a login and passes it on to your real mail provider. In **Settings → Email
+notifications**:
 
-Gmail doesn't let apps use your normal password, so you create an
-**app password** (a 16-letter password just for this app, which you can
-revoke anytime without changing your real password):
+1. **Mail relay:** the relay's address as this container sees it. For a
+   relay on the same NAS, use the NAS's LAN IP, not `localhost` (inside a
+   container that's the container itself).
+2. **Port:** the port the relay listens on (25 unless it's published on
+   another one).
+3. **Security:** *None* for plain SMTP on your own network, or *STARTTLS* if
+   your relay offers it.
+4. **From address:** a sender your relay accepts (relays often allow only
+   your own domain). **Send notifications to:** where the emails go.
+5. Tick **Send me an email**, save, then click **Send test email**.
 
-1. Turn on **2-Step Verification** at
-   https://myaccount.google.com/signinoptions/twosv (app passwords
-   require it).
-2. Create an app password named "Audible Watcher" at
-   https://myaccount.google.com/apppasswords and copy the code. Pasting it
-   with the spaces Google shows is fine.
-3. In Audible Watcher → **Settings**: enter your Gmail address, paste the app
-   password, set "Send notifications to", tick **Send me an email**, save,
-   then click **Send test email**.
-
-**Other providers:** Settings has a table of Yahoo Mail, iCloud Mail,
-Fastmail and Zoho Mail with a **Use** button that fills in the server
-settings; those providers need an app password too. Any other SMTP server
-works if you enter its server, port and security setting. Outlook.com /
-Hotmail usually won't work, because Microsoft is phasing out password
-sign-in for apps like this one.
-
-If a test email fails, the error message says what to fix (for example
-"use an app password, not your normal password").
-
-### Mail relay without sign-in
-
-If you run your own mail relay (for example a Postfix container on your
-NAS that forwards to your real mail provider), leave **Email address** and
-**App password** blank, set **Security** to *None* (plain SMTP, usually
-port 25) or *STARTTLS* if your relay offers it, and fill in both **From
-address** and **Send notifications to**. If you fill in an email address
-and app password, the app signs in as before.
+The relay also has to accept mail from this container's network: if it
+allows only certain networks, include the Docker networks. If a test email
+fails, the message says what to fix, and the Settings page has a
+troubleshooting list. If your relay does need a login, there's an optional
+username and password under *Only if your relay needs a login*.
 
 ## Wishlist price alerts
 
@@ -255,11 +241,11 @@ separately.
   early instead of waiting out every timeout, notes it under Recent checks,
   and tries again an hour later.
 - Back up `watcher.db` to keep your watch list; delete it to start fresh.
-- Your email app password is stored in that local database in plain text —
-  fine for a personal machine, but don't share the file. It's never shown
-  on any page, and it's cleared if you change the mail server or email
-  address, so it can only ever be sent to the server you entered it for.
-  You can revoke the app password anytime from your email provider.
+- If your relay needs a login, its password is stored in that local
+  database in plain text — fine for a personal machine, but don't share the
+  file. It's never shown on any page, and it's cleared if you change the
+  relay or the username, so it can only ever be sent to the relay you
+  entered it for.
 - Email off: books found while email is switched off show on the dashboard
   only. They aren't saved up for one huge email when you switch it on, and
   books you've already marked seen are never emailed.

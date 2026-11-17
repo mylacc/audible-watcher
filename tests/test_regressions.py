@@ -30,7 +30,7 @@ def test_bad_stored_check_hour_does_not_stop_startup():
     assert job is not None and "hour='8'" in str(job.trigger)
 
 
-# ---- 2. cross-site request forgery / app-password theft ------------------
+# ---- 2. cross-site request forgery / password theft ------------------
 
 def test_post_without_csrf_token_is_rejected(raw_client):
     before = db.get_settings()["smtp_host"]
@@ -76,21 +76,21 @@ def test_refused_post_never_redirects_offsite(raw_client):
 
 
 def test_changing_smtp_server_requires_password_again(client):
-    """Even with a valid token (e.g. DNS rebinding), the saved app password
+    """Even with a valid token (e.g. DNS rebinding), the saved password
     must never be sent to a server the user didn't enter it for."""
-    db.save_settings({"smtp_host": "smtp.gmail.com", "smtp_user": "me@x",
-                      "smtp_password": "secret-app-pw"})
+    db.save_settings({"smtp_host": "relay.example", "smtp_user": "me@x",
+                      "smtp_password": "secret-pw"})
     client.post("/settings", data={"check_hour": "8",
                                    "smtp_host": "evil.example",
                                    "smtp_user": "me@x", "smtp_password": ""})
     assert db.get_settings()["smtp_password"] == ""
     # an unchanged server keeps the saved password
-    db.save_settings({"smtp_host": "smtp.gmail.com",
-                      "smtp_password": "secret-app-pw"})
+    db.save_settings({"smtp_host": "relay.example",
+                      "smtp_password": "secret-pw"})
     client.post("/settings", data={"check_hour": "8",
-                                   "smtp_host": "smtp.gmail.com",
+                                   "smtp_host": "relay.example",
                                    "smtp_user": "me@x", "smtp_password": ""})
-    assert db.get_settings()["smtp_password"] == "secret-app-pw"
+    assert db.get_settings()["smtp_password"] == "secret-pw"
 
 
 def test_every_post_form_carries_a_csrf_token(client, watched):
