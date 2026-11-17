@@ -33,6 +33,17 @@
   </table>
 {% endmacro %}
 
+{% macro order_toggle(tab_name) %}
+  <div class="view-toggle sort-toggle">
+    <span class="muted small">Sort:</span>
+    <a class="btn btn-small {% if order == 'name' %}active{% endif %}"
+       href="{{ url_for('dashboard', tab=tab_name) }}">A–Z</a>
+    <a class="btn btn-small {% if order == 'released' %}active{% endif %}"
+       href="{{ url_for('dashboard', tab=tab_name, order='released') }}"
+       title="Newest already-released title first; pre-orders don't count">Last released</a>
+  </div>
+{% endmacro %}
+
 {% block head %}
   {% if check_running %}<meta http-equiv="refresh" content="8">{% endif %}
 {% endblock %}
@@ -225,21 +236,16 @@
   {% endif %}
 {% elif tab == 'series' %}
   {% if series %}
-  <div class="view-toggle sort-toggle">
-    <span class="muted small">Sort:</span>
-    <a class="btn btn-small {% if order == 'name' %}active{% endif %}"
-       href="{{ url_for('dashboard', tab='series') }}">A–Z</a>
-    <a class="btn btn-small {% if order == 'released' %}active{% endif %}"
-       href="{{ url_for('dashboard', tab='series', order='released') }}"
-       title="Newest already-released title first; pre-orders don't count">Last released</a>
-  </div>
+  {{ order_toggle('series') }}
   {{ watch_table(series, released=(order == 'released')) }}
   {% else %}
   <p class="muted">No series watched yet —
     <a href="{{ url_for('search', type='series') }}">add one</a>.</p>
   {% endif %}
 {% else %}
-  {% if authors %}{{ watch_table(authors) }}
+  {% if authors %}
+  {{ order_toggle('authors') }}
+  {{ watch_table(authors, released=(order == 'released')) }}
   {% else %}
   <p class="muted">No authors watched yet —
     <a href="{{ url_for('search') }}">add your favorite authors</a>.</p>

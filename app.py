@@ -538,13 +538,14 @@ def dashboard():
                else ("recent", "newest", "largest", "owned"))
     if sort not in allowed:
         sort = "recent"
-    order = request.args.get("order", "name")   # Series tab: name | released
-    if order not in SERIES_ORDERS:
+    order = request.args.get("order", "name")   # Authors/Series: name | released
+    if order not in WATCH_ORDERS:
         order = "name"
     watches = db.list_watches()
+    authors = [w for w in watches if w["type"] == "author"]
     series = [w for w in watches if w["type"] == "series"]
     if order == "released":
-        series = _by_last_released(series)
+        authors, series = _by_last_released(authors), _by_last_released(series)
     fresh = db.new_books()
     checks = db.recent_checks(5)
     settings = db.get_settings()
@@ -554,8 +555,7 @@ def dashboard():
     return render_template(
         "dashboard.html", tab=tab, view=view, sort=sort, order=order,
         fresh=fresh, checks=checks, settings=settings,
-        authors=[w for w in watches if w["type"] == "author"],
-        series=series,
+        authors=authors, series=series,
         preorders=db.preorder_books(),
         owned=owned, owned_total=db.owned_count(),
         owned_groups=_group_owned(owned, view, sort),
@@ -564,15 +564,15 @@ def dashboard():
         **(_wishlist_context(settings) if tab == "wishlist" else {}))
 
 
-# Series tab sort options (the first is the default): A–Z, or the series
-# whose most recent already-released title is newest first
-SERIES_ORDERS = ("name", "released")
+# Authors and Series tab sort options (the first is the default): A–Z, or
+# the watch whose most recent already-released title is newest first
+WATCH_ORDERS = ("name", "released")
 
 
 def _by_last_released(watches: list[dict]) -> list[dict]:
     """Newest already-released title first, so a release you may have
     missed rises to the top. Pre-orders don't count (they have their own
-    column); series with nothing out yet go last. Ties stay A–Z."""
+    column); watches with nothing out yet go last. Ties stay A–Z."""
     out = sorted(watches, key=lambda w: (w.get("name") or "").lower())
     out.sort(key=lambda w: w.get("last_released") or "", reverse=True)
     return out

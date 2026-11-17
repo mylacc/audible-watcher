@@ -1,4 +1,4 @@
-"""Series tab: sort A–Z (default) or by the newest already-released title,
+"""Authors and Series tabs: sort A–Z (default) or by the newest already-released title,
 so a release you may have missed rises to the top."""
 from datetime import date, timedelta
 
@@ -47,3 +47,25 @@ def test_unknown_series_order_falls_back_to_a_to_z(client):
     html = client.get("/?tab=series&order=bogus").get_data(as_text=True)
     table = html[html.index('class="watch-table"'):]
     assert table.find(">Alpha</a>") < table.find(">Bravo</a>")
+
+
+def _author(name, *release_dates):
+    wid = db.add_watch("author", name, None)
+    db.upsert_books(wid, [{"asin": f"A{name[:3].upper()}{i}", "title": f"{name} {i}",
+                           "authors": name, "url": "u", "release_date": d}
+                          for i, d in enumerate(release_dates)], as_new=False)
+
+
+def test_authors_sort_by_last_released(client):
+    today = date.today()
+    _author("Alpha", (today - 400 * DAY).isoformat())
+    _author("Bravo", (today - 7 * DAY).isoformat(), (today + 30 * DAY).isoformat())
+    _author("Charlie", (today - 2 * DAY).isoformat())
+    _author("Delta", (today + 60 * DAY).isoformat())
+    for url in ("/", "/?tab=authors"):              # Authors is the default tab
+        html = client.get(url).get_data(as_text=True)
+        assert _order(html) == ["Alpha", "Bravo", "Charlie", "Delta"]
+        assert 'href="/?tab=authors&amp;order=released"' in html   # the toggle
+    html = client.get("/?tab=authors&order=released").get_data(as_text=True)
+    assert _order(html) == ["Charlie", "Bravo", "Alpha", "Delta"]
+    assert "<th>Last released</th>" in html
