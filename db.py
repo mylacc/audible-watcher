@@ -324,6 +324,8 @@ def list_watches() -> list[dict]:
                    COUNT(wb.asin)                       AS book_count,
                    SUM(wb.is_new)                       AS new_count,
                    MAX(b.release_date)                  AS latest_release,
+                   MAX(CASE WHEN b.release_date <= ?    -- already out
+                            THEN b.release_date END)    AS last_released,
                    SUM(CASE WHEN b.release_date > ?  -- TBA isn't orderable
                             THEN 1 ELSE 0 END)          AS preorder_count
             FROM watches w
@@ -331,7 +333,7 @@ def list_watches() -> list[dict]:
             LEFT JOIN books b ON b.asin = wb.asin
             GROUP BY w.id
             ORDER BY w.type, w.name COLLATE NOCASE
-        """, (today,)).fetchall()
+        """, (today, today)).fetchall()
     return [dict(r) for r in rows]
 
 

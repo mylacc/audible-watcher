@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_macros.html" import book_card, group_section with context %}
 
-{% macro watch_table(rows) %}
+{% macro watch_table(rows, released=False) %}
   <table class="watch-table">
     <thead>
       <tr><th>Type</th><th>Name</th><th>Titles</th><th>New</th>
           <th>Pre-orders</th>
-          <th>Latest release</th><th>Last checked</th><th></th></tr>
+          <th>{{ 'Last released' if released else 'Latest release' }}</th>
+          <th>Last checked</th><th></th></tr>
     </thead>
     <tbody>
       {% for w in rows %}
@@ -18,7 +19,7 @@
         <td>{{ w.book_count }}</td>
         <td>{% if w.new_count %}<span class="badge">{{ w.new_count }}</span>{% else %}—{% endif %}</td>
         <td>{% if w.preorder_count %}<span class="badge badge-preorder">{{ w.preorder_count }}</span>{% else %}—{% endif %}</td>
-        <td>{{ w.latest_release or '—' }}</td>
+        <td>{{ (w.last_released if released else w.latest_release) or '—' }}</td>
         <td class="muted small">{{ w.last_checked_at|localtime }}</td>
         <td>
           <form method="post" action="{{ url_for('delete_watch', watch_id=w.id) }}"
@@ -223,7 +224,16 @@
   {% endif %}
   {% endif %}
 {% elif tab == 'series' %}
-  {% if series %}{{ watch_table(series) }}
+  {% if series %}
+  <div class="view-toggle sort-toggle">
+    <span class="muted small">Sort:</span>
+    <a class="btn btn-small {% if order == 'name' %}active{% endif %}"
+       href="{{ url_for('dashboard', tab='series') }}">A–Z</a>
+    <a class="btn btn-small {% if order == 'released' %}active{% endif %}"
+       href="{{ url_for('dashboard', tab='series', order='released') }}"
+       title="Newest already-released title first; pre-orders don't count">Last released</a>
+  </div>
+  {{ watch_table(series, released=(order == 'released')) }}
   {% else %}
   <p class="muted">No series watched yet —
     <a href="{{ url_for('search', type='series') }}">add one</a>.</p>
