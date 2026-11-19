@@ -194,6 +194,19 @@
   </div>
   {% if wishlist_error %}<div class="notice err">⚠️ {{ wishlist_error }}</div>{% endif %}
   {% if wishlist_items %}
+  <div class="view-toggle sort-toggle">
+    <span class="muted small">Sort:</span>
+    {% for key, label, hint in [
+        ('deals', 'Deals first', 'At or below your alert price first, cheapest first'),
+        ('price', 'Price: low to high', 'Titles without a price go last'),
+        ('price_desc', 'Price: high to low', 'Titles without a price go last'),
+        ('newest', 'Newest added', 'In your Audible wishlist order'),
+        ('oldest', 'Oldest added', 'In your Audible wishlist order, reversed')] %}
+    <a class="btn btn-small {% if wsort == key %}active{% endif %}" title="{{ hint }}"
+       href="{{ url_for('dashboard', tab='wishlist', wsort=key) if key != 'deals'
+                else url_for('dashboard', tab='wishlist') }}">{{ label }}</a>
+    {% endfor %}
+  </div>
   <table class="watch-table wishlist-table">
     <thead>
       <tr><th></th><th>Title</th><th>Price now</th><th>List</th>

@@ -541,6 +541,9 @@ def dashboard():
     order = request.args.get("order", "name")   # Authors/Series: name | released
     if order not in WATCH_ORDERS:
         order = "name"
+    wsort = request.args.get("wsort", "deals")  # Wishlist tab sort
+    if wsort not in WISHLIST_SORTS:
+        wsort = "deals"
     watches = db.list_watches()
     authors = [w for w in watches if w["type"] == "author"]
     series = [w for w in watches if w["type"] == "series"]
@@ -554,6 +557,7 @@ def dashboard():
         owned = _sort_all_books(owned, sort)
     return render_template(
         "dashboard.html", tab=tab, view=view, sort=sort, order=order,
+        wsort=wsort,
         fresh=fresh, checks=checks, settings=settings,
         authors=authors, series=series,
         preorders=db.preorder_books(),
@@ -561,7 +565,7 @@ def dashboard():
         owned_groups=_group_owned(owned, view, sort),
         connected=account.is_connected(),
         wishlist_total=db.wishlist_count(),
-        **(_wishlist_context(settings) if tab == "wishlist" else {}))
+        **(_wishlist_context(settings, wsort) if tab == "wishlist" else {}))
 
 
 # Authors and Series tab sort options (the first is the default): A–Z, or
@@ -578,9 +582,32 @@ def _by_last_released(watches: list[dict]) -> list[dict]:
     return out
 
 
-def _wishlist_context(settings: dict) -> dict:
-    """The Wishlist tab: titles at or below their alert price first
-    (cheapest first), then the rest in wishlist order."""
+# Wishlist tab sort options (the first is the default). "Added" is the
+# order of your Audible wishlist, which is fetched newest-added first.
+WISHLIST_SORTS = ("deals", "price", "price_desc", "newest", "oldest")
+
+
+def _sort_wishlist(items: list[dict], wsort: str) -> list[dict]:
+    """items arrive in wishlist order (newest added first). Titles without
+    a price go last in either price order."""
+    if wsort == "deals":     # at or below alert price (cheapest first), rest
+        return sorted(items, key=lambda i: (not i["hit"],     # as listed
+                                            i["price"] if i["hit"] else 0))
+    if wsort == "price":
+        return sorted(items, key=lambda i: (i["price"] is None,
+                                            i["price"] or 0))
+    if wsort == "price_desc":
+        return sorted(items, key=lambda i: (i["price"] is None,
+                                            -(i["price"] or 0)))
+    if wsort == "oldest":
+        return items[::-1]
+    return items             # newest added first
+
+
+def _wishlist_context(settings: dict, wsort: str = "deals") -> dict:
+    """The Wishlist tab, sorted by wsort (see WISHLIST_SORTS). The default
+    puts titles at or below their alert price first (cheapest first), then
+    the rest in wishlist order."""
     default = wishlist.default_target(settings)
     owned = db.owned_asins()
     items = []
@@ -589,8 +616,7 @@ def _wishlist_context(settings: dict) -> dict:
         i["hit"] = wishlist.at_or_below(i, default)
         i["owned"] = i["asin"] in owned
         items.append(i)
-    items.sort(key=lambda i: (not i["hit"],
-                              i["price"] if i["hit"] else 0))
+    items = _sort_wishlist(items, wsort)
     return {"wishlist_items": items, "price_default": default,
             "wishlist_checked_at": settings.get("wishlist_checked_at"),
             "wishlist_error": settings.get("wishlist_error")}

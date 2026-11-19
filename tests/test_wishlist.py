@@ -319,6 +319,35 @@ def test_wishlist_tab_lists_hits_first(client, amazon):
     assert "Default alert price: <strong>$5.00</strong>" in html
 
 
+def test_wishlist_sort_options(client, amazon):
+    db.save_settings({"price_threshold": "5"})
+    no_price = make_product("W4", "Unpriced Book", ["Some Author"], "2020-01-01")
+    # Audible serves the wishlist newest-added first: W1 is the newest
+    amazon([priced("W1", "Mid Book", 9.99), priced("W2", "Pricey Book", 19.99),
+            no_price, priced("W3", "Bargain Book", 3.99)])
+    wishlist.check()
+
+    def order(url):
+        html = client.get(url).get_data(as_text=True)
+        table = html[html.index("wishlist-table"):]
+        names = ["Mid Book", "Pricey Book", "Unpriced Book", "Bargain Book"]
+        return sorted(names, key=table.index), html
+
+    got, html = order("/?tab=wishlist")
+    assert got == ["Bargain Book", "Mid Book", "Pricey Book", "Unpriced Book"]
+    assert '<a class="btn btn-small active" title="At or below' in html
+    assert order("/?tab=wishlist&wsort=price")[0] == [
+        "Bargain Book", "Mid Book", "Pricey Book", "Unpriced Book"]
+    assert order("/?tab=wishlist&wsort=price_desc")[0] == [
+        "Pricey Book", "Mid Book", "Bargain Book", "Unpriced Book"]
+    assert order("/?tab=wishlist&wsort=newest")[0] == [
+        "Mid Book", "Pricey Book", "Unpriced Book", "Bargain Book"]
+    assert order("/?tab=wishlist&wsort=oldest")[0] == [
+        "Bargain Book", "Unpriced Book", "Pricey Book", "Mid Book"]
+    got, html = order("/?tab=wishlist&wsort=bogus")          # falls back
+    assert got[0] == "Bargain Book" and 'wsort=price_desc' in html
+
+
 def test_set_and_clear_a_title_target(client, amazon):
     amazon([priced("W1", "One", 9.99)])
     wishlist.check()

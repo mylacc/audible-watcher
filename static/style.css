@@ -123,6 +123,8 @@ main { max-width: 1000px; margin: 0 auto; padding: 20px 24px 60px; }
 .view-toggle .btn.active { background: var(--accent); color: #1a1204;
   border-color: var(--accent); font-weight: 600; }
 .view-toggle .btn.active:hover { text-decoration: none; }
+/* the chosen sort is marked by a check, not by colour alone */
+.sort-toggle .btn.active::before { content: "✓ "; }
 .series-head { margin: 26px 0 10px; }
 
 details.group > summary { cursor: pointer; list-style: none;
